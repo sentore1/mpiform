@@ -1,6 +1,18 @@
 import { createClient } from "./supabase/client";
 import type { Form, CertificateTemplate, FormSubmission } from "@/types";
 
+// ─── Error helper ─────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function dbError(context: string, err: any): Error {
+  const msg =
+    err?.message ??
+    err?.error_description ??
+    err?.details ??
+    JSON.stringify(err);
+  return new Error(`[${context}] ${msg}`);
+}
+
 // ─── Forms ────────────────────────────────────────────────────────────────────
 
 export async function getForms(): Promise<Form[]> {
@@ -9,7 +21,7 @@ export async function getForms(): Promise<Form[]> {
     .from("forms")
     .select("*")
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw dbError("getForms", error);
   return (data ?? []).map(mapForm);
 }
 
@@ -31,7 +43,7 @@ export async function getPublishedForms(): Promise<Form[]> {
     .select("*")
     .eq("is_published", true)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw dbError("getPublishedForms", error);
   return (data ?? []).map(mapForm);
 }
 
@@ -50,7 +62,7 @@ export async function createForm(
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw dbError("createForm", error);
   return mapForm(data);
 }
 
@@ -74,14 +86,14 @@ export async function updateForm(
     .eq("id", id)
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw dbError("updateForm", error);
   return mapForm(data);
 }
 
 export async function deleteForm(id: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("forms").delete().eq("id", id);
-  if (error) throw error;
+  if (error) throw dbError("deleteForm", error);
 }
 
 // ─── Certificate Templates ────────────────────────────────────────────────────
@@ -92,7 +104,7 @@ export async function getCertificateTemplates(): Promise<CertificateTemplate[]> 
     .from("certificate_templates")
     .select("*")
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw dbError("getCertificateTemplates", error);
   return (data ?? []).map(mapTemplate);
 }
 
@@ -113,18 +125,41 @@ export async function createCertificateTemplate(
   t: Omit<CertificateTemplate, "id" | "createdAt" | "updatedAt">
 ): Promise<CertificateTemplate> {
   const supabase = createClient();
-  const { data, error } = await supabase
+
+  // Try with new columns first; fall back without them if migration not yet run
+  const basePayload = {
+    name: t.name,
+    description: t.description ?? null,
+    image_url: t.imageUrl,
+    fields: t.fields,
+  };
+
+  const fullPayload = {
+    ...basePayload,
+    application_name: t.applicationName ?? null,
+    signer_name: t.signerName ?? null,
+    signer_title: t.signerTitle ?? null,
+  };
+
+  let res = await supabase
     .from("certificate_templates")
-    .insert({
-      name: t.name,
-      description: t.description,
-      image_url: t.imageUrl,
-      fields: t.fields,
-    })
+    .insert(fullPayload)
     .select()
     .single();
-  if (error) throw error;
-  return mapTemplate(data);
+
+  // If column not found, retry without the new columns
+  if (res.error?.message?.includes("application_name") ||
+      res.error?.message?.includes("signer_name") ||
+      res.error?.message?.includes("signer_title")) {
+    res = await supabase
+      .from("certificate_templates")
+      .insert(basePayload)
+      .select()
+      .single();
+  }
+
+  if (res.error) throw dbError("createCertificateTemplate", res.error);
+  return mapTemplate(res.data);
 }
 
 export async function updateCertificateTemplate(
@@ -132,20 +167,46 @@ export async function updateCertificateTemplate(
   t: Partial<Omit<CertificateTemplate, "id" | "createdAt" | "updatedAt">>
 ): Promise<CertificateTemplate> {
   const supabase = createClient();
-  const { data, error } = await supabase
+
+  const fullPatch = {
+    ...(t.name !== undefined && { name: t.name }),
+    ...(t.description !== undefined && { description: t.description }),
+    ...(t.imageUrl !== undefined && { image_url: t.imageUrl }),
+    ...(t.fields !== undefined && { fields: t.fields }),
+    ...(t.applicationName !== undefined && { application_name: t.applicationName }),
+    ...(t.signerName !== undefined && { signer_name: t.signerName }),
+    ...(t.signerTitle !== undefined && { signer_title: t.signerTitle }),
+    updated_at: new Date().toISOString(),
+  };
+
+  let res = await supabase
     .from("certificate_templates")
-    .update({
+    .update(fullPatch)
+    .eq("id", id)
+    .select()
+    .single();
+
+  // If column not found, retry without the new columns
+  if (res.error?.message?.includes("application_name") ||
+      res.error?.message?.includes("signer_name") ||
+      res.error?.message?.includes("signer_title")) {
+    const safePatch = {
       ...(t.name !== undefined && { name: t.name }),
       ...(t.description !== undefined && { description: t.description }),
       ...(t.imageUrl !== undefined && { image_url: t.imageUrl }),
       ...(t.fields !== undefined && { fields: t.fields }),
       updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  return mapTemplate(data);
+    };
+    res = await supabase
+      .from("certificate_templates")
+      .update(safePatch)
+      .eq("id", id)
+      .select()
+      .single();
+  }
+
+  if (res.error) throw dbError("updateCertificateTemplate", res.error);
+  return mapTemplate(res.data);
 }
 
 export async function deleteCertificateTemplate(id: string): Promise<void> {
@@ -154,7 +215,7 @@ export async function deleteCertificateTemplate(id: string): Promise<void> {
     .from("certificate_templates")
     .delete()
     .eq("id", id);
-  if (error) throw error;
+  if (error) throw dbError("deleteCertificateTemplate", error);
 }
 
 // ─── Submissions ──────────────────────────────────────────────────────────────
@@ -166,7 +227,7 @@ export async function getSubmissions(formId: string): Promise<FormSubmission[]> 
     .select("*")
     .eq("form_id", formId)
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) throw dbError("getSubmissions", error);
   return (data ?? []).map(mapSubmission);
 }
 
@@ -180,7 +241,7 @@ export async function createSubmission(
     .insert({ form_id: formId, data: submissionData })
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw dbError("createSubmission", error);
   return mapSubmission(data);
 }
 
@@ -195,7 +256,7 @@ export async function uploadFile(
   const { error } = await supabase.storage.from(bucket).upload(path, file, {
     upsert: true,
   });
-  if (error) throw error;
+  if (error) throw dbError("uploadFile", error);
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
@@ -206,7 +267,7 @@ export async function deleteStorageFile(
 ): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.storage.from(bucket).remove([path]);
-  if (error) throw error;
+  if (error) throw dbError("deleteStorageFile", error);
 }
 
 // ─── Mappers ──────────────────────────────────────────────────────────────────
@@ -233,6 +294,10 @@ function mapTemplate(row: any): CertificateTemplate {
     description: row.description ?? undefined,
     imageUrl: row.image_url,
     fields: row.fields ?? [],
+    // Gracefully handle if migration hasn't been run yet
+    applicationName: row.application_name ?? undefined,
+    signerName: row.signer_name ?? undefined,
+    signerTitle: row.signer_title ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

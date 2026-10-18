@@ -58,3 +58,23 @@ create policy "Allow delete certificates" on storage.objects for delete using (b
 
 create policy "Public read uploads" on storage.objects for select using (bucket_id = 'uploads');
 create policy "Allow upload uploads" on storage.objects for insert with check (bucket_id = 'uploads');
+
+-- ============================================================
+-- Set info@mp-i.org as admin
+-- Run this in your Supabase SQL Editor
+-- ============================================================
+
+-- Set app_metadata role = 'admin' for the user
+update auth.users
+set raw_app_meta_data = raw_app_meta_data || '{"role": "admin"}'::jsonb
+where email = 'info@mp-i.org';
+
+-- ============================================================
+-- Migration: add application_name, signer_name, signer_title
+-- to certificate_templates
+-- Run this in Supabase SQL Editor
+-- ============================================================
+alter table certificate_templates
+  add column if not exists application_name text,
+  add column if not exists signer_name text,
+  add column if not exists signer_title text;

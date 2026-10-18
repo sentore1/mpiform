@@ -6,7 +6,7 @@ import { FormBuilder } from "@/components/admin/FormBuilder";
 import { getForm, updateForm, getCertificateTemplates } from "@/lib/db";
 import type { Form, CertificateTemplate } from "@/types";
 
-export default function EditFormPage() {
+export function EditFormClient() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [form, setForm] = useState<Form | null>(null);

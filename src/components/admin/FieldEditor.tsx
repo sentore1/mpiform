@@ -150,7 +150,7 @@ export function FieldEditor({
                 }
               >
                 <option value="">— None —</option>
-                {certificatePlaceholders.map((p) => (
+                {Array.from(new Set(certificatePlaceholders)).map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>

@@ -100,6 +100,9 @@ export default function AdminFormsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 justify-end">
+                      <Link href={`/admin/forms/${form.id}/submissions`}>
+                        <Button variant="ghost" size="sm">Submissions</Button>
+                      </Link>
                       <Link href={`/forms/${form.id}`} target="_blank">
                         <Button variant="ghost" size="sm">Preview</Button>
                       </Link>
