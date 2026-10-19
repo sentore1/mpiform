@@ -5,10 +5,12 @@ import { createServerClient } from "@supabase/ssr";
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only guard /admin/* — let /admin/login through freely
-  if (!pathname.startsWith("/admin") || pathname.startsWith("/admin/login")) {
+  // Only guard /admin/* routes
+  if (!pathname.startsWith("/admin")) {
     return NextResponse.next();
   }
+
+  const isLoginPage = pathname.startsWith("/admin/login");
 
   // Build a mutable response so we can forward refreshed auth cookies
   let response = NextResponse.next();
@@ -34,10 +36,24 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // getUser() validates the JWT server-side — never trust client-side session alone
+  // getUser() validates the JWT server-side
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Already logged in and hitting the login page → redirect to dashboard
+  if (isLoginPage && user) {
+    const next = request.nextUrl.searchParams.get("next") ?? "/admin/forms";
+    const dashboardUrl = request.nextUrl.clone();
+    dashboardUrl.pathname = next;
+    dashboardUrl.search = "";
+    return NextResponse.redirect(dashboardUrl);
+  }
+
+  // Not a protected route (login page itself) — let through
+  if (isLoginPage) {
+    return response;
+  }
 
   // Not logged in → redirect to login
   if (!user) {
@@ -46,7 +62,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Logged in but not an admin → 403 forbidden page
+  // Logged in but not an admin → 403
   const role = user.app_metadata?.role;
   if (role !== "admin") {
     return new NextResponse(

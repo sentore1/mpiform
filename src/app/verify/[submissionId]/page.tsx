@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { SYSTEM_FIELD_IDS } from "@/types";
 import Link from "next/link";
 
+export const instant = false;
+
 interface Props {
   params: Promise<{ submissionId: string }>;
 }
