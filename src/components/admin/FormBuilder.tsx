@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   DndContext,
   closestCenter,
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Select } from "@/components/ui/Select";
+import { uploadFile } from "@/lib/db";
 
 const SYSTEM_IDS = new Set(Object.values(SYSTEM_FIELD_IDS));
 
@@ -129,6 +130,33 @@ export function FormBuilder({
 }: FormBuilderProps) {
   const [title, setTitle] = useState(initialForm?.title ?? "");
   const [description, setDescription] = useState(initialForm?.description ?? "");
+  const [logoUrl, setLogoUrl] = useState(initialForm?.logoUrl ?? "");
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(initialForm?.logoUrl ?? "");
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show local preview immediately
+    setLogoPreview(URL.createObjectURL(file));
+    setLogoUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `logos/${Date.now()}-logo.${ext}`;
+      const url = await uploadFile("uploads", path, file);
+      setLogoUrl(url);
+      setLogoPreview(url);
+    } finally {
+      setLogoUploading(false);
+    }
+  }
+
+  function removeLogo() {
+    setLogoUrl("");
+    setLogoPreview("");
+    if (logoInputRef.current) logoInputRef.current.value = "";
+  }
 
   // Custom fields only — strip system fields from existing saved data
   const [fields, setFields] = useState<FormField[]>(
@@ -183,6 +211,7 @@ export function FormBuilder({
     await onSave({
       title,
       description,
+      logoUrl: logoUrl || undefined,
       fields: [...SYSTEM_FIELDS, ...fields],
       certificateTemplateId: certificateTemplateId || undefined,
       isPublished: publish,
@@ -212,6 +241,67 @@ export function FormBuilder({
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe what this form is for…"
         />
+
+        {/* Logo upload */}
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-gray-700">
+            Form Logo <span className="text-gray-400 font-normal">(shown above the form)</span>
+          </label>
+          {logoPreview ? (
+            <div className="flex items-center gap-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logoPreview}
+                alt="Form logo preview"
+                className="h-16 w-auto max-w-[200px] object-contain rounded border border-gray-200 bg-gray-50 p-1"
+              />
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  loading={logoUploading}
+                >
+                  Change logo
+                </Button>
+                <button
+                  type="button"
+                  onClick={removeLogo}
+                  className="text-xs text-red-500 hover:text-red-700 text-left"
+                >
+                  Remove logo
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={logoUploading}
+              className="relative flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-gray-200 px-6 py-6 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+            >
+              {logoUploading ? (
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-500" />
+              ) : (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              )}
+              <span className="text-sm">{logoUploading ? "Uploading…" : "Click to upload a logo"}</span>
+              <span className="text-xs">PNG, JPG, SVG recommended</span>
+            </button>
+          )}
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleLogoChange}
+            aria-label="Upload form logo"
+          />
+        </div>
+
         <Select
           label="Certificate Template"
           options={templateOptions}

@@ -78,3 +78,19 @@ alter table certificate_templates
   add column if not exists application_name text,
   add column if not exists signer_name text,
   add column if not exists signer_title text;
+
+-- ============================================================
+-- Migration: add logo_url to forms
+-- Run this in Supabase SQL Editor
+-- ============================================================
+alter table forms
+  add column if not exists logo_url text;
+
+-- ============================================================
+-- Migration: add qr_x, qr_y, qr_size to certificate_templates
+-- Run this in Supabase SQL Editor
+-- ============================================================
+alter table certificate_templates
+  add column if not exists qr_x numeric not null default 90,
+  add column if not exists qr_y numeric not null default 88,
+  add column if not exists qr_size numeric not null default 60;

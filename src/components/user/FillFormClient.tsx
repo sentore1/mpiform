@@ -62,6 +62,18 @@ export function FillFormClient() {
       {/* Form content */}
       <main className="flex-1 py-10 px-4">
         <div className="max-w-2xl mx-auto">
+          {/* Per-form logo (if set), otherwise nothing */}
+          {form.logoUrl && (
+            <div className="mb-6 flex justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.logoUrl}
+                alt={`${form.title} logo`}
+                className="h-20 w-auto max-w-[240px] object-contain"
+              />
+            </div>
+          )}
+
           {/* Form title + description */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900">{form.title}</h1>

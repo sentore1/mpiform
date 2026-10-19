@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { v4 as uuidv4 } from "uuid";
 import type { CertificateTemplate, CertificateField } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 
 interface CertificateTemplateEditorProps {
   initialTemplate?: Partial<CertificateTemplate>;
@@ -80,6 +82,13 @@ export function CertificateTemplateEditor({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
+  // ── QR code position & size ─────────────────────────────────────────────────
+  const [qrX, setQrX] = useState(initialTemplate?.qrX ?? 90);
+  const [qrY, setQrY] = useState(initialTemplate?.qrY ?? 88);
+  const [qrSize, setQrSize] = useState(initialTemplate?.qrSize ?? 60);
+  const [draggingQr, setDraggingQr] = useState(false);
+  const [qrDragOffset, setQrDragOffset] = useState({ x: 0, y: 0 });
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -107,7 +116,7 @@ export function CertificateTemplateEditor({
       y: 50,
       fontSize: 24,
       fontFamily: "sans-serif",
-      color: "#1a1a1a",
+      color: "#ffffff",
       fontWeight: "normal",
       align: "center",
     };
@@ -150,24 +159,54 @@ export function CertificateTemplateEditor({
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!draggingId || !canvasRef.current) return;
+      if (!canvasRef.current) return;
       const rect = canvasRef.current.getBoundingClientRect();
+
+      if (draggingQr) {
+        const rawX = e.clientX - rect.left - qrDragOffset.x;
+        const rawY = e.clientY - rect.top - qrDragOffset.y;
+        setQrX(parseFloat(Math.min(100, Math.max(0, (rawX / rect.width) * 100)).toFixed(2)));
+        setQrY(parseFloat(Math.min(100, Math.max(0, (rawY / rect.height) * 100)).toFixed(2)));
+        return;
+      }
+
+      if (!draggingId) return;
       const rawX = e.clientX - rect.left - dragOffset.x;
       const rawY = e.clientY - rect.top - dragOffset.y;
       const x = Math.min(100, Math.max(0, (rawX / rect.width) * 100));
       const y = Math.min(100, Math.max(0, (rawY / rect.height) * 100));
       updateField(draggingId, { x: parseFloat(x.toFixed(2)), y: parseFloat(y.toFixed(2)) });
     },
-    [draggingId, dragOffset]
+    [draggingId, draggingQr, dragOffset, qrDragOffset]
   );
 
   const handleMouseUp = useCallback(() => {
     setDraggingId(null);
+    setDraggingQr(false);
   }, []);
+
+  // ── QR drag ──────────────────────────────────────────────────────────────────
+  const handleQrMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDraggingQr(true);
+    setSelectedId(null);
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const elX = (qrX / 100) * rect.width;
+    const elY = (qrY / 100) * rect.height;
+    setQrDragOffset({
+      x: e.clientX - rect.left - elX,
+      y: e.clientY - rect.top - elY,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrX, qrY]);
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   async function handleSave() {
-    await onSave({ name, description, applicationName, signerName, signerTitle, imageUrl, fields });
+    await onSave({ name, description, applicationName, signerName, signerTitle, imageUrl, fields, qrX, qrY, qrSize });
   }
 
   return (
@@ -181,11 +220,12 @@ export function CertificateTemplateEditor({
           placeholder="e.g. Participation Certificate"
           required
         />
-        <Input
+        <Textarea
           label="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Optional description"
+          rows={3}
         />
         <Input
           label="Application / Organisation Name"
@@ -232,7 +272,7 @@ export function CertificateTemplateEditor({
                     x: 50, y: 50,
                     fontSize: 20,
                     fontFamily: "sans-serif",
-                    color: "#1a1a1a",
+                    color: "#ffffff",
                     fontWeight: "normal",
                     align: "center",
                   };
@@ -313,33 +353,65 @@ export function CertificateTemplateEditor({
               />
 
               {/* Overlay fields */}
-              {fields.map((field) => (
-                <div
-                  key={field.id}
-                  className={`absolute cursor-move px-1 rounded transition-shadow ${
-                    selectedId === field.id
-                      ? "ring-2 ring-indigo-500 shadow-lg bg-white/20"
-                      : "hover:ring-1 hover:ring-gray-400"
-                  }`}
-                  style={{
-                    left: `${field.x}%`,
-                    top: `${field.y}%`,
-                    transform: "translate(-50%, -50%)",
-                    fontSize: `${field.fontSize * 0.5}px`,
-                    fontFamily: field.fontFamily,
-                    color: field.color,
-                    fontWeight: field.fontWeight,
-                    textAlign: field.align,
-                    whiteSpace: "nowrap",
-                  }}
-                  onMouseDown={(e) => handleMouseDown(e, field.id)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Field: ${field.label}`}
-                >
-                  {field.label}
-                </div>
-              ))}
+              {fields.map((field) => {
+                const canvas = canvasRef.current;
+                const canvasWidth = canvas?.offsetWidth ?? 800;
+                // Scale font: design at 800px wide, scale proportionally
+                const scaledSize = (field.fontSize / 800) * canvasWidth;
+                return (
+                  <div
+                    key={field.id}
+                    className={`absolute cursor-move px-1 rounded transition-shadow ${
+                      selectedId === field.id
+                        ? "ring-2 ring-indigo-500 shadow-lg bg-black/10"
+                        : "hover:ring-1 hover:ring-white/60"
+                    }`}
+                    style={{
+                      left: `${field.x}%`,
+                      top: `${field.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      fontSize: `${scaledSize}px`,
+                      fontFamily: field.fontFamily,
+                      color: field.color,
+                      fontWeight: field.fontWeight,
+                      textAlign: field.align,
+                      whiteSpace: "nowrap",
+                      textShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                    }}
+                    onMouseDown={(e) => handleMouseDown(e, field.id)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Field: ${field.label}`}
+                  >
+                    {field.label}
+                  </div>
+                );
+              })}
+
+              {/* QR code — draggable on canvas */}
+              {(() => {
+                const canvasWidth = canvasRef.current?.offsetWidth ?? 800;
+                const scaledQrSize = Math.round((qrSize / 800) * canvasWidth);
+                return (
+                  <div
+                    className={`absolute cursor-move flex flex-col items-center gap-0.5 ${draggingQr ? "ring-2 ring-indigo-500 rounded" : "hover:ring-2 hover:ring-indigo-400 rounded"}`}
+                    style={{
+                      left: `${qrX}%`,
+                      top: `${qrY}%`,
+                      transform: "translate(-50%, -50%)",
+                    }}
+                    onMouseDown={handleQrMouseDown}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="QR code — drag to reposition"
+                    title="Drag to reposition QR code"
+                  >
+                    <div className="bg-white p-1 rounded shadow-sm pointer-events-none">
+                      <QRCodeSVG value="https://verify.example.com/preview" size={scaledQrSize} level="M" includeMargin={false} />
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -468,6 +540,47 @@ export function CertificateTemplateEditor({
                 </Button>
               </>
             )}
+
+            {/* ── QR code controls ── always shown ── */}
+            <div className="pt-4 border-t border-gray-100 flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-gray-700">QR Code</h3>
+              <p className="text-xs text-gray-400 -mt-2">Drag it on the canvas or adjust manually.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-600">X Position (%)</label>
+                  <input
+                    type="number" min={0} max={100} step={0.5}
+                    value={qrX}
+                    onChange={(e) => setQrX(parseFloat(e.target.value))}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-600">Y Position (%)</label>
+                  <input
+                    type="number" min={0} max={100} step={0.5}
+                    value={qrY}
+                    onChange={(e) => setQrY(parseFloat(e.target.value))}
+                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">
+                  Size — <span className="text-gray-500 font-normal">{qrSize}px</span>
+                </label>
+                <input
+                  type="range" min={20} max={200} step={2}
+                  value={qrSize}
+                  onChange={(e) => setQrSize(parseInt(e.target.value))}
+                  className="w-full accent-indigo-600"
+                  aria-label="QR code size"
+                />
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Small</span><span>Large</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

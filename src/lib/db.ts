@@ -56,6 +56,7 @@ export async function createForm(
     .insert({
       title: form.title,
       description: form.description,
+      logo_url: form.logoUrl ?? null,
       fields: form.fields,
       certificate_template_id: form.certificateTemplateId ?? null,
       is_published: form.isPublished,
@@ -76,6 +77,7 @@ export async function updateForm(
     .update({
       ...(form.title !== undefined && { title: form.title }),
       ...(form.description !== undefined && { description: form.description }),
+      ...(form.logoUrl !== undefined && { logo_url: form.logoUrl }),
       ...(form.fields !== undefined && { fields: form.fields }),
       ...(form.certificateTemplateId !== undefined && {
         certificate_template_id: form.certificateTemplateId,
@@ -139,6 +141,9 @@ export async function createCertificateTemplate(
     application_name: t.applicationName ?? null,
     signer_name: t.signerName ?? null,
     signer_title: t.signerTitle ?? null,
+    qr_x: t.qrX ?? 90,
+    qr_y: t.qrY ?? 88,
+    qr_size: t.qrSize ?? 60,
   };
 
   let res = await supabase
@@ -150,7 +155,10 @@ export async function createCertificateTemplate(
   // If column not found, retry without the new columns
   if (res.error?.message?.includes("application_name") ||
       res.error?.message?.includes("signer_name") ||
-      res.error?.message?.includes("signer_title")) {
+      res.error?.message?.includes("signer_title") ||
+      res.error?.message?.includes("qr_x") ||
+      res.error?.message?.includes("qr_y") ||
+      res.error?.message?.includes("qr_size")) {
     res = await supabase
       .from("certificate_templates")
       .insert(basePayload)
@@ -176,6 +184,9 @@ export async function updateCertificateTemplate(
     ...(t.applicationName !== undefined && { application_name: t.applicationName }),
     ...(t.signerName !== undefined && { signer_name: t.signerName }),
     ...(t.signerTitle !== undefined && { signer_title: t.signerTitle }),
+    ...(t.qrX !== undefined && { qr_x: t.qrX }),
+    ...(t.qrY !== undefined && { qr_y: t.qrY }),
+    ...(t.qrSize !== undefined && { qr_size: t.qrSize }),
     updated_at: new Date().toISOString(),
   };
 
@@ -189,7 +200,10 @@ export async function updateCertificateTemplate(
   // If column not found, retry without the new columns
   if (res.error?.message?.includes("application_name") ||
       res.error?.message?.includes("signer_name") ||
-      res.error?.message?.includes("signer_title")) {
+      res.error?.message?.includes("signer_title") ||
+      res.error?.message?.includes("qr_x") ||
+      res.error?.message?.includes("qr_y") ||
+      res.error?.message?.includes("qr_size")) {
     const safePatch = {
       ...(t.name !== undefined && { name: t.name }),
       ...(t.description !== undefined && { description: t.description }),
@@ -278,6 +292,7 @@ function mapForm(row: any): Form {
     id: row.id,
     title: row.title,
     description: row.description ?? undefined,
+    logoUrl: row.logo_url ?? undefined,
     fields: row.fields ?? [],
     certificateTemplateId: row.certificate_template_id ?? undefined,
     isPublished: row.is_published,
@@ -294,10 +309,12 @@ function mapTemplate(row: any): CertificateTemplate {
     description: row.description ?? undefined,
     imageUrl: row.image_url,
     fields: row.fields ?? [],
-    // Gracefully handle if migration hasn't been run yet
     applicationName: row.application_name ?? undefined,
     signerName: row.signer_name ?? undefined,
     signerTitle: row.signer_title ?? undefined,
+    qrX: row.qr_x ?? 90,
+    qrY: row.qr_y ?? 88,
+    qrSize: row.qr_size ?? 60,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

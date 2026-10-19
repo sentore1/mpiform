@@ -164,8 +164,9 @@ export function FormFiller({ form }: FormFillerProps) {
       <div className="pt-2 border-t border-gray-100">
         <Button
           type="submit"
+          variant="dark"
           loading={submitting}
-          className="w-full sm:w-auto bg-black hover:bg-gray-900 border-black focus:ring-gray-800"
+          className="w-full sm:w-auto"
         >
           Submit Form
         </Button>

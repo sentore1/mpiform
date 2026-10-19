@@ -70,6 +70,10 @@ export interface CertificateTemplate {
   applicationName?: string;  // shown via __app_name__ placeholder
   signerName?: string;       // shown via __signer_name__ placeholder
   signerTitle?: string;      // shown via __signer_title__ placeholder
+  // QR code position and size (percentages / design units)
+  qrX?: number;    // % from left (default 90)
+  qrY?: number;    // % from top  (default 88)
+  qrSize?: number; // size in design units out of 800px width (default 60)
   createdAt: string;
   updatedAt: string;
 }
@@ -90,6 +94,7 @@ export interface Form {
   id: string;
   title: string;
   description?: string;
+  logoUrl?: string;       // optional logo shown above the form
   fields: FormField[];
   certificateTemplateId?: string;
   isPublished: boolean;

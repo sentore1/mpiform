@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import type { CertificateTemplate, FormSubmission, FormField } from "@/types";
 import { SYSTEM_FIELD_IDS } from "@/types";
 import { Button } from "@/components/ui/Button";
@@ -40,11 +41,13 @@ export function CertificatePreview({
       case "__signer_title__":
         return template.signerTitle ?? "";
       case "__recipient_name__":
-        // Always pull from the locked system Name field
         return resolveSystemOrMapped(SYSTEM_FIELD_IDS.name, certFieldLabel);
-      default:
+      default: {
         // Try mapped form field first
-        return resolveSystemOrMapped(null, certFieldLabel);
+        const mapped = resolveSystemOrMapped(null, certFieldLabel);
+        // If nothing maps, render the label as literal text
+        return mapped !== "" ? mapped : certFieldLabel;
+      }
     }
   }
 
@@ -152,6 +155,8 @@ export function CertificatePreview({
         {imgLoaded &&
           template.fields.map((field) => {
             const text = resolveValue(field.label);
+            const containerWidth = containerRef.current?.offsetWidth ?? 800;
+            const scaledSize = (field.fontSize / 800) * containerWidth;
             return (
               <div
                 key={field.id}
@@ -160,7 +165,7 @@ export function CertificatePreview({
                   left: `${field.x}%`,
                   top: `${field.y}%`,
                   transform: "translate(-50%, -50%)",
-                  fontSize: `${field.fontSize}px`,
+                  fontSize: `${scaledSize}px`,
                   fontFamily: field.fontFamily,
                   color: field.color,
                   fontWeight: field.fontWeight,
@@ -173,6 +178,27 @@ export function CertificatePreview({
               </div>
             );
           })}
+
+        {/* QR code — position and size from template settings */}
+        {imgLoaded && (
+          <div
+            className="absolute pointer-events-none flex flex-col items-center gap-0.5"
+            style={{
+              left: `${template.qrX ?? 90}%`,
+              top: `${template.qrY ?? 88}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+          >
+            <div className="bg-white p-1 rounded shadow-sm">
+              <QRCodeSVG
+                value={`${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/verify/${submission.id}`}
+                size={Math.round(((template.qrSize ?? 60) / 800) * (containerRef.current?.offsetWidth ?? 800))}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Download buttons */}

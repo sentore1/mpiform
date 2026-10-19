@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm() {
   const router = useRouter();
@@ -19,15 +18,20 @@ export function LoginForm() {
     setError("");
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
-      if (authError) {
-        setError(authError.message);
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Invalid credentials.");
         return;
       }
+
+      // Session cookie is now set — let the middleware handle the redirect
       router.push(next);
       router.refresh();
     } finally {
